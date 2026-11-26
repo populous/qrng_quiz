@@ -7,80 +7,66 @@ sim = AerSimulator()
 qc = QuantumCircuit(1, 1)
 qc.h(0)
 qc.measure(0, 0)
+PRESET = '10110010'
 
-PRESET = "10110010"
-votes = {"A": 0, "B": 0}
-
-def quantum_bit():
-    r = sim.run(qc, shots=1, memory=True).result()
-    return int(r.get_memory()[0])
-
-@app.get("/bit/<int:i>")
+@app.get('/bit/<int:i>')
 def bit(i):
     i %= 8
-    return jsonify(a=int(PRESET[i]), b=quantum_bit(), i=i)
+    b = sim.run(qc, shots=1, memory=True).result().get_memory()[0]
+    return jsonify(a=int(PRESET[i]), b=int(b), i=i)
 
-@app.post("/vote/<c>")
-def vote(c):
-    if c in votes:
-        votes[c] += 1
-    return jsonify(votes)
-
-@app.get("/")
+@app.get('/')
 def index():
     return render_template_string(HTML)
 
-HTML = """<!doctype html><html lang="ko"><meta charset="utf-8">
-<title>양자난수 vs 일반수</title>
+HTML = '''<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>난수 전시 퀴즈</title>
 <style>
-body{background:linear-gradient(rgba(11,16,32,.25),rgba(11,16,32,.25)),
- url('/static/bg.jpg') center/cover fixed #0b1020;
- color:#e8ecff;font-family:sans-serif;text-align:center;overflow-x:hidden;padding-bottom:240px}
-h1{margin-top:30px}
-.row{display:flex;justify-content:center;gap:10px;margin:12px;align-items:center}
-.outer{flex-direction:column;gap:8px}
-.lab{font-size:min(42px,5vw)}
-.cell{width:min(105px,10.5vw);aspect-ratio:7/9;border:2px solid #345;border-radius:10px;
- font:700 min(72px,7vw) monospace;display:flex;align-items:center;justify-content:center;transition:opacity .4s}
-.cell.on{background:#16305a;border-color:#6cf}
-.cell.fade{opacity:0}
-button{font-size:39px;padding:21px 45px;margin:10px;border-radius:12px;border:0;
- background:#2a6df4;color:#fff;cursor:pointer}
-#res{font-size:39px;min-height:60px;margin-top:20px;color:#ffd166}
-#logo{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);
- width:min(600px,90vw);filter:invert(1) hue-rotate(180deg);opacity:.95}
+html,body{margin:0;height:100%}
+body{background:#0b1020;color:#e8ecff;font:clamp(16px,2vw,26px) sans-serif;text-align:center;overflow:hidden}
+#bg{position:fixed;inset:0;width:100vw;height:100vh;z-index:-2}
+#shade{position:fixed;inset:0;z-index:-1;background:rgba(11,16,32,.25)}
+.ui{position:relative;z-index:1}
+h1{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;margin:0;z-index:1}
+.bits{font:700 clamp(32px,7vw,96px) monospace;letter-spacing:.12em;margin:.25em;white-space:pre}
+#logo{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);width:min(600px,90vw);filter:invert(1) hue-rotate(180deg);opacity:.95}
 </style>
-<h1>어느 줄이 양자난수일까요?</h1>
-<div class="row outer"><div class="lab">A</div><div id="ra" class="row"></div></div>
-<div class="row outer"><div class="lab">B</div><div id="rb" class="row"></div></div>
-<div>
- <button onclick="vote('A')">A가 양자</button>
- <button onclick="vote('B')">B가 양자</button>
-</div>
-<div id="res"></div>
+<canvas id="bg"></canvas><div id="shade"></div>
+<div class="ui"><h1>양자난수가 그리는 그림</h1>
+<p class="bits"><span id="a"></span></p><p class="bits"><span id="b"></span></p>
+<p id="res"></p><p id="label"></p></div>
 <img id="logo" src="/static/logo.png" alt="Lattice Co., Ltd.">
 <script>
-const mk=id=>{const e=document.getElementById(id);e.innerHTML='';
- for(let k=0;k<8;k++){const d=document.createElement('div');d.className='cell';d.textContent='?';e.appendChild(d)}
- return [...e.children]};
-let A=mk('ra'),B=mk('rb'),i=0;
-async function tick(){
- if(i===8){
-  [...A,...B].forEach(c=>c.classList.add('fade'));
-  await new Promise(r=>setTimeout(r,600));
-  A=mk('ra');B=mk('rb');i=0;document.getElementById('res').textContent='';
- }
- const d=await (await fetch('/bit/'+i)).json();
- A[i].textContent=d.a;B[i].textContent=d.b;
- A[i].classList.add('on');B[i].classList.add('on');i++;
+const $=id=>document.getElementById(id), canvas=$('bg'), ctx=canvas.getContext('2d'), photo=new Image();
+const tiles=16;
+let a='', b='', code='';
+photo.src='/static/bg.jpg';
+function rows(){$('a').textContent=a.padEnd(8,' ');$('b').textContent=b.padEnd(8,' ');}
+function shuffled(){
+ const W=photo.naturalWidth,H=photo.naturalHeight,tw=W/tiles,th=H/tiles;
+ const perm=Array.from({length:tiles*tiles},(_,i)=>i);
+ let s=parseInt(code,2);
+ for(let i=perm.length-1;i>0;i--){s=(Math.imul(s,1664525)+1013904223)>>>0;const j=Math.floor(s/4294967296*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}
+ const off=document.createElement('canvas');off.width=W;off.height=H;const o=off.getContext('2d');
+ perm.forEach((src,d)=>o.drawImage(photo,(src%tiles)*tw,Math.floor(src/tiles)*th,tw,th,(d%tiles)*tw,Math.floor(d/tiles)*th,tw,th));
+ return off;
 }
+function render(){
+ if(!photo.naturalWidth)return;
+ canvas.width=innerWidth;canvas.height=innerHeight;
+ const src=code?shuffled():photo;
+ const s=Math.max(canvas.width/src.width,canvas.height/src.height);
+ const w=src.width*s,h=src.height*s;
+ ctx.drawImage(src,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+ $('label').textContent=code?`배치 코드: ${code} · 256조각`:'';
+}
+photo.onload=render;window.onresize=render;rows();
+let busy=false;
+async function tick(){if(busy)return;busy=true;try{
+ if(b.length===8){a='';b='';code='';rows();$('res').textContent='';render();await new Promise(r=>setTimeout(r,400));}
+ const r=await fetch('/bit/'+b.length,{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();a+=d.a;b+=d.b;rows();if(b.length===8){code=b;render();await new Promise(r=>setTimeout(r,8000));}
+ }catch(e){$('res').textContent='비트 수신 지연 · 재시도 중';}finally{busy=false;}}
 setInterval(tick,1000);
-async function vote(c){
- const v=await (await fetch('/vote/'+c,{method:'POST'})).json();
- document.getElementById('res').textContent=
-  `투표 A:${v.A} B:${v.B}`;
-}
-</script></html>"""
+</script></html>'''
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
