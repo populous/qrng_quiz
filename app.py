@@ -8,19 +8,12 @@ qc = QuantumCircuit(1, 1)
 qc.h(0)
 qc.measure(0, 0)
 PRESET = '10110010'
-votes = {'A': 0, 'B': 0}
 
 @app.get('/bit/<int:i>')
 def bit(i):
     i %= 8
     b = sim.run(qc, shots=1, memory=True).result().get_memory()[0]
     return jsonify(a=int(PRESET[i]), b=int(b), i=i)
-
-@app.post('/vote/<c>')
-def vote(c):
-    if c in votes:
-        votes[c] += 1
-    return jsonify(votes)
 
 @app.get('/')
 def index():
@@ -33,15 +26,13 @@ body{background:#0b1020;color:#e8ecff;font:clamp(16px,2vw,26px) sans-serif;text-
 #bg{position:fixed;inset:0;width:100vw;height:100vh;z-index:-2}
 #shade{position:fixed;inset:0;z-index:-1;background:rgba(11,16,32,.25)}
 .ui{position:relative;z-index:1}
-h1{margin:30px 0 0}
+h1{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:100%;margin:0;z-index:1}
 .bits{font:700 clamp(32px,7vw,96px) monospace;letter-spacing:.12em;margin:.25em;white-space:pre}
-button{font:inherit;padding:.5em 1em}
 #logo{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);width:min(600px,90vw);filter:invert(1) hue-rotate(180deg);opacity:.95}
 </style>
 <canvas id="bg"></canvas><div id="shade"></div>
-<div class="ui"><h1>어느 줄이 미리 정해진 숫자일까요?</h1>
-<p class="bits">A <span id="a"></span></p><p class="bits">B <span id="b"></span></p>
-<button onclick="vote('A')">A가 시뮬레이션</button> <button onclick="vote('B')">B가 시뮬레이션</button>
+<div class="ui"><h1>양자난수가 그리는 그림</h1>
+<p class="bits"><span id="a"></span></p><p class="bits"><span id="b"></span></p>
 <p id="res"></p><p id="label"></p></div>
 <img id="logo" src="/static/logo.png" alt="Lattice Co., Ltd.">
 <script>
@@ -72,10 +63,9 @@ photo.onload=render;window.onresize=render;rows();
 let busy=false;
 async function tick(){if(busy)return;busy=true;try{
  if(b.length===8){a='';b='';code='';rows();$('res').textContent='';render();await new Promise(r=>setTimeout(r,400));}
- const r=await fetch('/bit/'+b.length,{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();a+=d.a;b+=d.b;rows();if(b.length===8){code=b;render();}
+ const r=await fetch('/bit/'+b.length,{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();a+=d.a;b+=d.b;rows();if(b.length===8){code=b;render();await new Promise(r=>setTimeout(r,8000));}
  }catch(e){$('res').textContent='비트 수신 지연 · 재시도 중';}finally{busy=false;}}
 setInterval(tick,1000);
-async function vote(c){const r=await fetch('/vote/'+c,{method:'POST'});if(r.ok){const v=await r.json();$('res').textContent=`투표 A:${v.A} B:${v.B}`;}}
 </script></html>'''
 
 if __name__ == '__main__':
