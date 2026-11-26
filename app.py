@@ -27,31 +27,55 @@ def index():
     return render_template_string(HTML)
 
 HTML = '''<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>난수 전시 퀴즈</title>
-<style>body{background:#0b1020;color:white;font:clamp(16px,2vw,26px) sans-serif;text-align:center}section{display:flex;justify-content:center;gap:2vw}figure{margin:0;width:45vw}figure img,canvas{display:block;width:100%;height:30vh;object-fit:contain}.bits{font:700 clamp(24px,5vw,64px) monospace;letter-spacing:.12em;margin:.25em}button{font:inherit;padding:.5em 1em}footer img{max-width:45vw;height:8vh;object-fit:contain;filter:invert(1) hue-rotate(180deg)}</style>
-<h1>어느 줄이 미리 정해진 숫자일까요?</h1><section><figure><figcaption>고정 원본</figcaption><img id="photo" src="/static/bg.jpg" alt="원본 사진"></figure><figure><figcaption id="label">첫 8비트 대기 중</figcaption><canvas id="view" aria-label="재배치된 사진"></canvas></figure></section>
-<p class="bits">A <span id="a"></span></p><p class="bits">B <span id="b"></span></p><button onclick="vote('A')">A가 시뮬레이션</button> <button onclick="vote('B')">B가 시뮬레이션</button><p id="res"></p><footer>Aer 시뮬레이션 · 8비트 배치 코드<br><img src="/static/logo.png" alt="Lattice Co., Ltd."></footer>
+<style>
+html,body{margin:0;height:100%}
+body{background:#0b1020;color:#e8ecff;font:clamp(16px,2vw,26px) sans-serif;text-align:center;overflow:hidden}
+#bg{position:fixed;inset:0;width:100vw;height:100vh;z-index:-2}
+#shade{position:fixed;inset:0;z-index:-1;background:rgba(11,16,32,.25)}
+.ui{position:relative;z-index:1}
+h1{margin:30px 0 0}
+.bits{font:700 clamp(24px,5vw,64px) monospace;letter-spacing:.12em;margin:.25em}
+button{font:inherit;padding:.5em 1em}
+#logo{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);width:min(600px,90vw);filter:invert(1) hue-rotate(180deg);opacity:.95}
+</style>
+<canvas id="bg"></canvas><div id="shade"></div>
+<div class="ui"><h1>어느 줄이 미리 정해진 숫자일까요?</h1>
+<p class="bits">A <span id="a"></span></p><p class="bits">B <span id="b"></span></p>
+<button onclick="vote('A')">A가 시뮬레이션</button> <button onclick="vote('B')">B가 시뮬레이션</button>
+<p id="res"></p><p id="label"></p></div>
+<img id="logo" src="/static/logo.png" alt="Lattice Co., Ltd.">
 <script>
-const el=id=>document.getElementById(id), photo=el('photo'), view=el('view'), ctx=view.getContext('2d');
-let a='', b='', latest='';
-function rows(){el('a').textContent=a.padEnd(8,'?');el('b').textContent=b.padEnd(8,'?');}
-function draw(){
- if(!photo.naturalWidth)return;
- view.width=1000;view.height=100*Math.max(1,Math.round(10*photo.naturalHeight/photo.naturalWidth));
- if(!latest){ctx.drawImage(photo,0,0,view.width,view.height);return;}
- let state=parseInt(latest,2);const order=Array.from({length:10000},(_,i)=>i);
- for(let i=9999;i>0;i--){state=(Math.imul(state,1664525)+1013904223)>>>0;const j=Math.floor(state/4294967296*(i+1));[order[i],order[j]]=[order[j],order[i]];}
- const w=photo.naturalWidth/100,h=photo.naturalHeight/100,dh=view.height/100;
- order.forEach((s,d)=>ctx.drawImage(photo,s%100*w,Math.floor(s/100)*h,w,h,d%100*10,Math.floor(d/100)*dh,10,dh));
- el('label').textContent='배치 코드: '+latest+' · 10,000조각';
+const $=id=>document.getElementById(id), canvas=$('bg'), ctx=canvas.getContext('2d'), photo=new Image();
+const tiles=16;
+let a='', b='', code='';
+photo.src='/static/bg.jpg';
+function rows(){$('a').textContent=a.padEnd(8,'?');$('b').textContent=b.padEnd(8,'?');}
+function shuffled(){
+ const W=photo.naturalWidth,H=photo.naturalHeight,tw=W/tiles,th=H/tiles;
+ const perm=Array.from({length:tiles*tiles},(_,i)=>i);
+ let s=parseInt(code,2);
+ for(let i=perm.length-1;i>0;i--){s=(Math.imul(s,1664525)+1013904223)>>>0;const j=Math.floor(s/4294967296*(i+1));[perm[i],perm[j]]=[perm[j],perm[i]];}
+ const off=document.createElement('canvas');off.width=W;off.height=H;const o=off.getContext('2d');
+ perm.forEach((src,d)=>o.drawImage(photo,(src%tiles)*tw,Math.floor(src/tiles)*th,tw,th,(d%tiles)*tw,Math.floor(d/tiles)*th,tw,th));
+ return off;
 }
-photo.onload=draw;if(photo.complete)draw();rows();
+function render(){
+ if(!photo.naturalWidth)return;
+ canvas.width=innerWidth;canvas.height=innerHeight;
+ const src=code?shuffled():photo;
+ const s=Math.max(canvas.width/src.width,canvas.height/src.height);
+ const w=src.width*s,h=src.height*s;
+ ctx.drawImage(src,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+ $('label').textContent=code?`배치 코드: ${code} · 256조각`:'';
+}
+photo.onload=render;window.onresize=render;rows();
 let busy=false;
 async function tick(){if(busy)return;busy=true;try{
- if(b.length===8){a='';b='';rows();el('res').textContent='';await new Promise(r=>setTimeout(r,400));}
- const r=await fetch('/bit/'+b.length,{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();a+=d.a;b+=d.b;rows();if(b.length===8){latest=b;draw();}
- }catch(e){el('res').textContent='비트 수신 지연 · 재시도 중';}finally{busy=false;}}
+ if(b.length===8){a='';b='';code='';rows();$('res').textContent='';render();await new Promise(r=>setTimeout(r,400));}
+ const r=await fetch('/bit/'+b.length,{cache:'no-store'});if(!r.ok)throw Error(r.status);const d=await r.json();a+=d.a;b+=d.b;rows();if(b.length===8){code=b;render();}
+ }catch(e){$('res').textContent='비트 수신 지연 · 재시도 중';}finally{busy=false;}}
 setInterval(tick,1000);
-async function vote(c){const r=await fetch('/vote/'+c,{method:'POST'});if(r.ok){const v=await r.json();el('res').textContent=`투표 A:${v.A} B:${v.B}`;}}
+async function vote(c){const r=await fetch('/vote/'+c,{method:'POST'});if(r.ok){const v=await r.json();$('res').textContent=`투표 A:${v.A} B:${v.B}`;}}
 </script></html>'''
 
 if __name__ == '__main__':
