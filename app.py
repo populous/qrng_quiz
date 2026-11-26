@@ -34,7 +34,7 @@ body{background:#0b1020;color:#e8ecff;font:clamp(16px,2vw,26px) sans-serif;text-
 #shade{position:fixed;inset:0;z-index:-1;background:rgba(11,16,32,.25)}
 .ui{position:relative;z-index:1}
 h1{margin:30px 0 0}
-.bits{font:700 clamp(24px,5vw,64px) monospace;letter-spacing:.12em;margin:.25em}
+.bits{font:700 clamp(32px,7vw,96px) monospace;letter-spacing:.12em;margin:.25em;white-space:pre}
 button{font:inherit;padding:.5em 1em}
 #logo{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);width:min(600px,90vw);filter:invert(1) hue-rotate(180deg);opacity:.95}
 </style>
@@ -49,7 +49,7 @@ const $=id=>document.getElementById(id), canvas=$('bg'), ctx=canvas.getContext('
 const tiles=16;
 let a='', b='', code='';
 photo.src='/static/bg.jpg';
-function rows(){$('a').textContent=a.padEnd(8,'?');$('b').textContent=b.padEnd(8,'?');}
+function rows(){$('a').textContent=a.padEnd(8,' ');$('b').textContent=b.padEnd(8,' ');}
 function shuffled(){
  const W=photo.naturalWidth,H=photo.naturalHeight,tw=W/tiles,th=H/tiles;
  const perm=Array.from({length:tiles*tiles},(_,i)=>i);
